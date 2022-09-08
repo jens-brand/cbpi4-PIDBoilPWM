@@ -8,12 +8,12 @@ import datetime
 @parameters([Property.Number(label = "P", configurable = True, description="P Value of PID"),
              Property.Number(label = "I", configurable = True, description="I Value of PID"),
              Property.Number(label = "D", configurable = True, description="D Value of PID"),
-             Property.Select(label="SampleTime", options=[2,5], description="PID Sample time in seconds. Default: 5 (How often is the output calculation done)"),
+             Property.Select(label="SampleTime", options=[2,5,10,20,30], description="PID Sample time in seconds. Default: 5 (How often is the output calculation done)"),
              Property.Number(label = "Max_Output", configurable = True, description="Power before Boil threshold is reached."),
              Property.Number(label = "Boil_Threshold", configurable = True, description="When this temperature is reached, power will be set to Max Boil Output (default: 98 °C/208 F)"),
              Property.Number(label = "Max_Boil_Output", configurable = True, default_value = 85, description="Power when Boil Threshold is reached.")])
 
-class PIDBoil(CBPiKettleLogic):
+class PIDBoilPWM(CBPiKettleLogic):
 
 
     async def on_stop(self):
@@ -34,32 +34,31 @@ class PIDBoil(CBPiKettleLogic):
             maxboilout = int(self.props.get("Max_Boil_Output", 100))
             self.kettle = self.get_kettle(self.id)
             self.heater = self.kettle.heater
-            heat_percent_old = maxout
             self.heater_actor = self.cbpi.actor.find_by_id(self.heater)
                        
-            await self.actor_on(self.heater, maxout)
-
             pid = PIDArduino(sampleTime, p, i, d, 0, maxout)
 
             while self.running == True:
-                current_kettle_power= self.heater_actor.power
-                sensor_value = current_temp = self.get_sensor_value(self.kettle.sensor).get("value")
+                current_temp = self.get_sensor_value(self.kettle.sensor).get("value")
                 target_temp = self.get_kettle_target_temp(self.id)
                 if current_temp >= float(maxtempboil):
                     heat_percent = maxboilout
                 else:
-                    heat_percent = pid.calc(sensor_value, target_temp)
+                    heat_percent = pid.calc(current_temp, target_temp)
 
-                
-                if (heat_percent_old != heat_percent) or (heat_percent != current_kettle_power):
-                    await self.actor_set_power(self.heater, heat_percent)
-                    heat_percent_old= heat_percent
-                await asyncio.sleep(sampleTime)
+                heating_time = sampleTime * heat_percent / 100
+                wait_time = sampleTime - heating_time
+                if heating_time > 0:
+                    await self.actor_on(self.heater)
+                    await asyncio.sleep(heating_time)
+                if wait_time > 0:
+                    await self.actor_off(self.heater)
+                    await asyncio.sleep(wait_time)
 
         except asyncio.CancelledError as e:
             pass
         except Exception as e:
-            logging.error("BM_PIDSmartBoilWithPump Error {}".format(e))
+            logging.error("PIDBoilPWM Error {}".format(e))
         finally:
             self.running = False
             await self.actor_off(self.heater)
@@ -147,4 +146,4 @@ def setup(cbpi):
     :return: 
     '''
 
-    cbpi.plugin.register("PIDBoil", PIDBoil)
+    cbpi.plugin.register("PIDBoilPWM", PIDBoilPWM)
