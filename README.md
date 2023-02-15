@@ -32,4 +32,5 @@ Alternativeley you can install (or clone) it from the GIT Repo. In case of updat
 
 ### Changelog
 
+- 15.02.23: (0.0.2) Reintegrated bugfix version 0.0.9 from avollkopf
 - 08.09.22: (0.0.1) Initial fork from [https://github.com/avollkopf/cbpi4-PIDBoil]
